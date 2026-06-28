@@ -1,68 +1,77 @@
-import os
 import asyncio
-import discord
-from discord.ext import commands
+import json
+import os
 from dotenv import load_dotenv
+import websockets
 
-# Load .env
+# Load tokens from environment
 load_dotenv()
-
-# Get tokens
 TOKENS = [
     os.getenv("TOKEN_1"),
     os.getenv("TOKEN_2"),
     os.getenv("TOKEN_3")
 ]
 
-# Target platforms for each token
-PLATFORMS = ['web', 'desktop', 'mobile']
-
-class SelfBot(commands.Bot):
-    def __init__(self, index):
-        intents = discord.Intents.default()
-        intents.presences = True
-        super().__init__(
-            command_prefix=commands.when_mentioned_or("!"),
-            self_bot=True,
-            intents=intents
-        )
-        self.index = index
-        self.token = TOKENS[index]
-        self.platform = PLATFORMS[index]
-
-    async def on_ready(self):
-        user = self.user
-        print(f"✅ {user} is online ({self.platform} client)")
-        
-        # Force the client status (Platform) directly
-        # This makes Discord show the browser/app icon next to your name
-        await self.ws.identify(
-            status='online',
-            client_status={
-                'desktop': self.platform == 'desktop',
-                'mobile': self.platform == 'mobile',
-                'web': self.platform == 'web'
-            }
-        )
-        
-        # Log success to Railway logs
-        print(f"[{self.platform}] Status updated successfully.")
-
-async def run_token(index):
-    if not TOKENS[index]:
-        print(f"❌ Token {index+1} missing in .env")
-        return
+async def login_token(token, platform):
+    headers = {
+        "Authorization": token
+    }
+    
+    # Different platform identifiers
+    platform_ids = {
+        "web": {"os": "Linux", "browser": "Chrome", "browser_version": "120.0.0.0"},
+        "desktop": {"os": "Windows", "browser": "Discord Client", "browser_version": "1.0.9007"},
+        "mobile": {"os": "Android", "browser": "Discord Android", "browser_version": "128.18"}
+    }
+    
+    # WebSocket URL for Discord
+    uri = "wss://gateway.discord.gg/?v=10&encoding=json"
+    
     try:
-        bot = SelfBot(index)
-        await bot.start(TOKENS[index])
+        async with websockets.connect(uri) as websocket:
+            # Send authentication with platform info
+            auth_payload = {
+                "op": 2,
+                "d": {
+                    "token": token,
+                    "intents": 513,
+                    "properties": platform_ids[platform],
+                    "presence": {
+                        "status": "online",
+                        "since": 0,
+                        "activities": [],
+                        "afk": False
+                    }
+                }
+            }
+            
+            await websocket.send(json.dumps(auth_payload))
+            response = await websocket.recv()
+            
+            # Check if authentication was successful
+            response_data = json.loads(response)
+            if response_data.get("op") == 10:  # Ready event
+                print(f"✅ Token logged in on {platform}")
+                # Keep connection alive
+                while True:
+                    try:
+                        await asyncio.sleep(30)
+                        await websocket.ping()
+                    except:
+                        break
+            else:
+                print(f"❌ Failed to login on {platform}: {response_data}")
+                
     except Exception as e:
-        print(f"❌ Token {index+1} failed: {e}")
+        print(f"❌ Error with {platform} login: {e}")
 
 async def main():
-    tasks = [run_token(i) for i in range(3) if TOKENS[i]]
-    if not tasks:
-        print("No tokens found. Check .env file.")
-        return
+    tasks = [
+        login_token(TOKENS[0], "web"),
+        login_token(TOKENS[1], "desktop"),
+        login_token(TOKENS[2], "mobile")
+    ]
+    
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
