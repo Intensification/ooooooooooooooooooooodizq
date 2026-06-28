@@ -17,12 +17,38 @@ async def login_token(token, platform):
         "Authorization": token
     }
     
-    # Different platform identifiers
-    platform_ids = {
-        "web": {"os": "Linux", "browser": "Chrome", "browser_version": "120.0.0.0"},
-        "desktop": {"os": "Windows", "browser": "Discord Client", "browser_version": "1.0.9007"},
-        "mobile": {"os": "Android", "browser": "Discord Android", "browser_version": "128.18"}
-    }
+    # Platform-specific properties
+    if platform == "web":
+        platform_properties = {
+            "os": "Windows",
+            "browser": "Chrome",
+            "browser_version": "120.0.0.0",
+            "browser_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "device": "",
+            "system_locale": "en-US",
+            "browser_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+    elif platform == "desktop":
+        platform_properties = {
+            "os": "Windows",
+            "browser": "Discord Client",
+            "browser_version": "1.0.9007",
+            "release_channel": "stable",
+            "client_version": "1.0.9007",
+            "os_version": "10.0.19045",
+            "os_arch": "x64",
+            "system_locale": "en-US"
+        }
+    else:  # mobile
+        platform_properties = {
+            "os": "Android",
+            "browser": "Discord Android",
+            "browser_version": "128.18",
+            "device": "SM-G973F",
+            "os_version": "11",
+            "client_version": "128.18",
+            "system_locale": "en-US"
+        }
     
     # WebSocket URL for Discord
     uri = "wss://gateway.discord.gg/?v=10&encoding=json"
@@ -35,7 +61,7 @@ async def login_token(token, platform):
                 "d": {
                     "token": token,
                     "intents": 513,
-                    "properties": platform_ids[platform],
+                    "properties": platform_properties,
                     "presence": {
                         "status": "online",
                         "since": 0,
