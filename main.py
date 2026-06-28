@@ -10,9 +10,9 @@ load_dotenv()
 # Gather tokens from environment variables
 TOKENS = [os.getenv("TOKEN_1"), os.getenv("TOKEN_2"), os.getenv("TOKEN_3")]
 
-async def login_token(token, platform):
+async def login_token(token, identifier):
     if not token:
-        print(f"❌ Missing token in .env file for: {platform}")
+        print(f"❌ Missing token in .env file for: {identifier}")
         return
 
     uri = "wss://gateway.discord.gg/?v=10&encoding=json"
@@ -29,36 +29,16 @@ async def login_token(token, platform):
             async def heartbeat():
                 while True:
                     await asyncio.sleep(interval)
-                    # Must pass the last sequence number or None
                     await ws.send(json.dumps({"op": 1, "d": last_sequence}))
             
             asyncio.create_task(heartbeat())
             
-            # 2. Assign exact properties Discord expects for each platform layout
-            if platform == "desktop":
-                properties = {
-                    "os": "Windows",
-                    "browser": "Discord Client",
-                    "device": ""
-                }
-            elif platform == "web":
-                properties = {
-                    "os": "Windows",
-                    "browser": "Chrome",
-                    "device": ""
-                }
-            elif platform == "mobile":
-                properties = {
-                    "os": "Android",
-                    "browser": "Discord Android",
-                    "device": "Android Device"
-                }
-            else:
-                properties = {
-                    "os": "Windows",
-                    "browser": "Chrome",
-                    "device": ""
-                }
+            # 2. Emulate the working Desktop Client properties for all connections
+            properties = {
+                "os": "Windows",
+                "browser": "Discord Client",
+                "device": ""
+            }
 
             # Build Identify Payload
             auth = {
@@ -81,36 +61,35 @@ async def login_token(token, platform):
             while True:
                 msg = json.loads(await ws.recv())
                 
-                # Update sequence tracking if provided by the gateway
                 if "s" in msg and msg["s"] is not None:
                     last_sequence = msg["s"]
                 
                 # Check for Invalid Session response
                 if msg.get("op") == 9:
-                    print(f"❌ {platform} failed: Gateway flagged the session as invalid. (Check token validation)")
+                    print(f"❌ Token {identifier} failed: Gateway flagged the session as invalid.")
                     break
                     
                 # Check for successful authentication
                 if msg.get("t") == "READY":
-                    print(f"✅ {platform} is now online!")
+                    print(f"✅ Token {identifier} is now online using Desktop Client properties layout!")
                     
     except Exception as e:
-        print(f"❌ {platform} connection encountered an error: {e}")
+        print(f"❌ Token {identifier} connection encountered an error: {e}")
 
 async def main():
-    # Staggering connection starts by 1.5 seconds avoids aggressive simultaneous API hits
     print("Starting connections...")
     
-    print("Connecting Web profile...")
-    task1 = asyncio.create_task(login_token(TOKENS[0], "web"))
+    # Staggering connection starts to avoid spamming the gateway simultaneously
+    print("Connecting Token 1...")
+    task1 = asyncio.create_task(login_token(TOKENS[0], "1"))
     await asyncio.sleep(1.5)
     
-    print("Connecting Desktop profile...")
-    task2 = asyncio.create_task(login_token(TOKENS[1], "desktop"))
+    print("Connecting Token 2...")
+    task2 = asyncio.create_task(login_token(TOKENS[1], "2"))
     await asyncio.sleep(1.5)
     
-    print("Connecting Mobile profile...")
-    task3 = asyncio.create_task(login_token(TOKENS[2], "mobile"))
+    print("Connecting Token 3...")
+    task3 = asyncio.create_task(login_token(TOKENS[2], "3"))
     
     # Wait for all tasks to run concurrently
     await asyncio.gather(task1, task2, task3)
