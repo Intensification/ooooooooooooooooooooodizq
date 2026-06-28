@@ -4,59 +4,93 @@ import os
 from dotenv import load_dotenv
 import websockets
 
+# Load environment variables from .env file
 load_dotenv()
 
-# Ensure these are set in your .env file
+# Gather tokens from environment variables
 TOKENS = [os.getenv("TOKEN_1"), os.getenv("TOKEN_2"), os.getenv("TOKEN_3")]
 
 async def login_token(token, platform):
     if not token:
-        print(f"❌ Missing token for {platform}")
+        print(f"❌ Missing token in .env file for: {platform}")
         return
 
     uri = "wss://gateway.discord.gg/?v=10&encoding=json"
     
     try:
         async with websockets.connect(uri) as ws:
-            # Step 1: Handle Hello standard handshake
+            # 1. Handle Gateway Hello Handshake
             hello = json.loads(await ws.recv())
             interval = hello["d"]["heartbeat_interval"] / 1000
             
-            # Track sequence number for heartbeats
             last_sequence = None
             
+            # Keep-alive heartbeat task
             async def heartbeat():
                 while True:
                     await asyncio.sleep(interval)
-                    # The gateway requires the 'd' key containing the last sequence number
+                    # Must pass the last sequence number or None
                     await ws.send(json.dumps({"op": 1, "d": last_sequence}))
             
             asyncio.create_task(heartbeat())
             
-            # Step 2: Identify payload
+            # 2. Assign exact properties Discord expects for each platform layout
+            if platform == "desktop":
+                properties = {
+                    "os": "Windows",
+                    "browser": "Discord Client",
+                    "device": ""
+                }
+            elif platform == "web":
+                properties = {
+                    "os": "Windows",
+                    "browser": "Chrome",
+                    "device": ""
+                }
+            elif platform == "mobile":
+                properties = {
+                    "os": "Android",
+                    "browser": "Discord Android",
+                    "device": "Android Device"
+                }
+            else:
+                properties = {
+                    "os": "Windows",
+                    "browser": "Chrome",
+                    "device": ""
+                }
+
+            # Build Identify Payload
             auth = {
                 "op": 2,
                 "d": {
                     "token": token,
-                    "properties": {
-                        "os": "Windows" if platform != "mobile" else "Android",
-                        "browser": "Chrome" if platform == "web" else "Discord Client",
-                        "device": ""
-                    },
-                    "presence": {"status": "online", "activities": [], "afk": False}
+                    "properties": properties,
+                    "presence": {
+                        "status": "online",
+                        "activities": [],
+                        "afk": False
+                    }
                 }
             }
             
+            # Send authentication
             await ws.send(json.dumps(auth))
             
-            # Step 3: Listen for events and update sequence
+            # 3. Process events loop
             while True:
                 msg = json.loads(await ws.recv())
                 
-                # Update sequence number if present
+                # Update sequence tracking if provided by the gateway
                 if "s" in msg and msg["s"] is not None:
                     last_sequence = msg["s"]
+                
+                # Check for Invalid Session response
+                if msg.get("op") == 9:
+                    print(f"❌ {platform} failed: Gateway flagged the session as invalid. (Check token validation)")
+                    break
                     
+                # Check for successful authentication
                 if msg.get("t") == "READY":
                     print(f"✅ {platform} is now online!")
                     
@@ -64,11 +98,25 @@ async def login_token(token, platform):
         print(f"❌ {platform} connection encountered an error: {e}")
 
 async def main():
-    await asyncio.gather(
-        login_token(TOKENS[0], "web"),
-        login_token(TOKENS[1], "desktop"),
-        login_token(TOKENS[2], "mobile")
-    )
+    # Staggering connection starts by 1.5 seconds avoids aggressive simultaneous API hits
+    print("Starting connections...")
+    
+    print("Connecting Web profile...")
+    task1 = asyncio.create_task(login_token(TOKENS[0], "web"))
+    await asyncio.sleep(1.5)
+    
+    print("Connecting Desktop profile...")
+    task2 = asyncio.create_task(login_token(TOKENS[1], "desktop"))
+    await asyncio.sleep(1.5)
+    
+    print("Connecting Mobile profile...")
+    task3 = asyncio.create_task(login_token(TOKENS[2], "mobile"))
+    
+    # Wait for all tasks to run concurrently
+    await asyncio.gather(task1, task2, task3)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nProcess terminated by user.")
