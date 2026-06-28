@@ -1,0 +1,13 @@
+{
+  "name": "discord-tokens-online",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js-selfbot-v13": "^13.0.0",
+    "dotenv": "^16.0.0"
+  }
+}
